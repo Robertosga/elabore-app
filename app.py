@@ -3,23 +3,33 @@ from fpdf import FPDF
 from datetime import datetime
 import os
 from PIL import Image
-def check_password():
-    def password_entered():
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # limpa a senha da memória
+
+# --- FUNÇÃO DE SEGURANÇA ---
+def verificar_acesso():
+    """Retorna True se a senha estiver correta"""
+    
+    if "acesso_liberado" not in st.session_state:
+        st.session_state["acesso_liberado"] = False
+
+    if st.session_state["acesso_liberado"]:
+        return True
+
+    st.title("🔐 Acesso Restrito - Elabore Toldos")
+    senha_digitada = st.text_input("Digite a senha para continuar:", type="password")
+    
+    if st.button("Entrar"):
+        # Aqui ele busca exatamente o que você salvou no segredo do site
+        if senha_digitada == st.secrets["credentials"]["password"]:
+            st.session_state["acesso_liberado"] = True
+            st.rerun()
         else:
-            st.session_state["password_correct"] = False
+            st.error("Senha incorreta! Tente novamente.")
+    
+    return False
 
-    if "password_correct" not in st.session_state:
-        st.text_input("Senha de Acesso", type="password", on_change=password_entered, key="password")
-        if "password_correct" in st.session_state:
-            st.error("😕 Senha incorreta")
-        return False
-    return True
-
-if not check_password():
-    st.stop()  # Para o código aqui se a senha não estiver correta
+# SE NÃO ESTIVER LOGADO, PARA O CÓDIGO AQUI
+if not verificar_acesso():
+    st.stop()
 
 # 1. FUNÇÃO DE FORMATAÇÃO (PRECISA ESTAR AQUI NO TOPO)
 def formatar_br(valor):
@@ -177,4 +187,5 @@ if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
 
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
+
 
