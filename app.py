@@ -3,6 +3,23 @@ from fpdf import FPDF
 from datetime import datetime
 import os
 from PIL import Image
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # limpa a senha da memória
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Senha de Acesso", type="password", on_change=password_entered, key="password")
+        if "password_correct" in st.session_state:
+            st.error("😕 Senha incorreta")
+        return False
+    return True
+
+if not check_password():
+    st.stop()  # Para o código aqui se a senha não estiver correta
 
 # 1. FUNÇÃO DE FORMATAÇÃO (PRECISA ESTAR AQUI NO TOPO)
 def formatar_br(valor):
@@ -160,3 +177,4 @@ if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
 
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
+
