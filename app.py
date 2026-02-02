@@ -103,7 +103,7 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
 # --- INTERFACE ---
-st.title("🚀 Elabore Toldos - Sistema de Vendas")
+st.title("Elabore Toldos")
 
 with st.expander("👤 Dados do Cliente", expanded=True):
     c1, c2 = st.columns(2)
@@ -158,4 +158,5 @@ if col_a.button("📄 Gerar Orçamento"):
 
 if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
+
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
