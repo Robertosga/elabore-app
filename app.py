@@ -3,6 +3,7 @@ from fpdf import FPDF
 from datetime import datetime
 import os
 from PIL import Image
+import pytz
 
 # --- FUNÇÃO DE SEGURANÇA ---
 def verificar_acesso():
@@ -168,12 +169,25 @@ with st.expander("💰 Pagamento e Entrega"):
     data_ent = c3.date_input("Previsão de Entrega")
     restante = valor_final - entrada
 
+# 1. Primeiro, definimos o fuso horário de Brasília
+fuso_br = pytz.timezone('America/Sao_Paulo')
+
+# 2. Agora capturamos o horário exato de Brasília
+agora_br = datetime.now(fuso_br)
+
+# 3. Colocamos no seu dicionário de dados
 dados_doc = {
-    "cliente": nome_c, "tel": tel_c, "end": end_c,
-    "total_geral": total_servicos, "desconto": desconto, "valor_final": valor_final,
-    "pagamento": forma_pag, "entrada": entrada, "restante": restante,
+    "cliente": nome_c, 
+    "tel": tel_c, 
+    "end": end_c,
+    "total_geral": total_servicos, 
+    "desconto": desconto, 
+    "valor_final": valor_final,
+    "pagamento": forma_pag, 
+    "entrada": entrada, 
+    "restante": restante,
     "entrega": data_ent.strftime('%d/%m/%Y'),
-    "data_hora": datetime.now().strftime('%d/%m/%Y %H:%M')
+    "data_hora": agora_br.strftime('%d/%m/%Y %H:%M') # <--- Pronto!
 }
 
 st.write(f"**Restante: R$ {formatar_br(restante)}**")
@@ -187,5 +201,6 @@ if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
 
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
+
 
 
