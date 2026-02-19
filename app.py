@@ -46,7 +46,8 @@ EMPRESA = {
 }
 
 SERVICOS_LISTA = [
-    "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona", "Cobertura Policarbonato",
+    "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
+    "Toldo Retratil Braço, tubo e sarrafo aluminio","Cobertura Policarbonato",
     "Cobertura Lona", "Painel", "Fachada", "Estrutura", "Banner", "Adesivo", "Plotter",
     "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline",
     "Pintura", "Cavalete", "Cartão de visita", "Panfleto 4x0, 5000 und","Panfleto 4x4, 5000 und", "Luminoso", "Logotipo",
@@ -202,6 +203,7 @@ if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
 
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
+
 
 
 
