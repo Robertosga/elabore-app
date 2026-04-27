@@ -7,8 +7,6 @@ import pytz
 
 # --- FUNÇÃO DE SEGURANÇA ---
 def verificar_acesso():
-    """Retorna True se a senha estiver correta"""
-    
     if "acesso_liberado" not in st.session_state:
         st.session_state["acesso_liberado"] = False
 
@@ -19,7 +17,6 @@ def verificar_acesso():
     senha_digitada = st.text_input("Digite a senha para continuar:", type="password")
     
     if st.button("Entrar"):
-        # Aqui ele busca exatamente o que você salvou no segredo do site
         if senha_digitada == st.secrets["credentials"]["password"]:
             st.session_state["acesso_liberado"] = True
             st.rerun()
@@ -28,11 +25,10 @@ def verificar_acesso():
     
     return False
 
-# SE NÃO ESTIVER LOGADO, PARA O CÓDIGO AQUI
 if not verificar_acesso():
     st.stop()
 
-# 1. FUNÇÃO DE FORMATAÇÃO (PRECISA ESTAR AQUI NO TOPO)
+# 1. FUNÇÃO DE FORMATAÇÃO
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -55,8 +51,9 @@ SERVICOS_LISTA = [
     "Folder","Arte Gráfica","Site","Aplicação Webb"
 ]
 
+# Inicialização do estado com o campo 'descricao'
 if 'servicos_adicionados' not in st.session_state:
-    st.session_state.servicos_adicionados = [{"servico": SERVICOS_LISTA[0], "qtd": 1.0, "valor": 0.0}]
+    st.session_state.servicos_adicionados = [{"servico": SERVICOS_LISTA[0], "descricao": "", "qtd": 1.0, "valor": 0.0}]
 
 def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf = FPDF()
@@ -65,13 +62,9 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     # Logo
     if os.path.exists('logo.png'):
         try:
-            # Abre a imagem original
             img = Image.open('logo.png')
-            # Converte para RGB (remove transparências e entrelaçamento que travam o PDF)
             img_rgb = img.convert("RGB")
-            # Salva uma versão temporária "limpa"
             img_rgb.save("logo_limpa.jpg", "JPEG")
-            # Usa a versão limpa no PDF
             pdf.image("logo_limpa.jpg", 10, 8, 33)
         except Exception as e:
             st.error(f"Erro ao processar a logo: {e}")
@@ -96,27 +89,41 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 8, "DETALHES DOS SERVICOS", ln=True, fill=True)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(90, 8, "Servico", 1)
+    pdf.cell(90, 8, "Servico / Descricao", 1)
     pdf.cell(30, 8, "Qtd/m2", 1)
     pdf.cell(35, 8, "V. Unit", 1)
     pdf.cell(35, 8, "Subtotal", 1, ln=True)
     
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Arial", size=9)
     for s in lista_servicos:
         sub = s['qtd'] * s['valor']
-        # Usando a formatação BR aqui
-        pdf.cell(90, 8, s['servico'][:40], 1)
-        pdf.cell(30, 8, f"{s['qtd']}", 1)
-        pdf.cell(35, 8, f"R$ {formatar_br(s['valor'])}", 1)
-        pdf.cell(35, 8, f"R$ {formatar_br(sub)}", 1, ln=True)
+        
+        # Guardar posição atual para desenhar a borda corretamente
+        x = pdf.get_x()
+        y = pdf.get_y()
+        
+        # Coluna de Serviço e Descrição (Multi-line)
+        texto_servico = f"{s['servico']}"
+        if s['descricao']:
+            texto_servico += f"\nObs: {s['descricao']}"
+            
+        pdf.multi_cell(90, 5, texto_servico, 1)
+        novo_y = pdf.get_y()
+        altura_celula = novo_y - y
+        
+        # Voltar para o lado da multi-célula para as outras colunas
+        pdf.set_xy(x + 90, y)
+        pdf.cell(30, altura_celula, f"{s['qtd']}", 1)
+        pdf.cell(35, altura_celula, f"R$ {formatar_br(s['valor'])}", 1)
+        pdf.cell(35, altura_celula, f"R$ {formatar_br(sub)}", 1, ln=True)
 
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"TOTAL DOS SERVICOS: R$ {formatar_br(dados['total_geral'])}", ln=True, align='R')
     pdf.cell(0, 10, f"DESCONTO: R$ {formatar_br(dados['desconto'])}", ln=True, align='R')
-    pdf.set_text_color(255, 0, 0) # Vermelho para o total final
+    pdf.set_text_color(255, 0, 0)
     pdf.cell(0, 10, f"VALOR FINAL: R$ {formatar_br(dados['valor_final'])}", ln=True, align='R')
-    pdf.set_text_color(0, 0, 0) # Volta para preto
+    pdf.set_text_color(0, 0, 0)
 
     # Pagamento
     pdf.ln(5)
@@ -144,19 +151,24 @@ with st.expander("👤 Dados do Cliente", expanded=True):
 st.write("### 🛠 Serviços")
 
 for i, item in enumerate(st.session_state.servicos_adicionados):
-    cols = st.columns([3, 1, 1, 0.5])
-    st.session_state.servicos_adicionados[i]['servico'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, key=f"ser_{i}")
-    st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, key=f"qtd_{i}")
-    st.session_state.servicos_adicionados[i]['valor'] = cols[2].number_input("V. Unit", min_value=0.0, step=10.0, key=f"val_{i}")
-    if cols[3].button("❌", key=f"del_{i}"):
-        st.session_state.servicos_adicionados.pop(i)
-        st.rerun()
+    with st.container():
+        cols = st.columns([2, 1, 1, 0.5])
+        st.session_state.servicos_adicionados[i]['servico'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, key=f"ser_{i}")
+        st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, key=f"qtd_{i}")
+        st.session_state.servicos_adicionados[i]['valor'] = cols[2].number_input("V. Unit", min_value=0.0, step=10.0, key=f"val_{i}")
+        
+        # Botão de excluir
+        if cols[3].button("❌", key=f"del_{i}"):
+            st.session_state.servicos_adicionados.pop(i)
+            st.rerun()
+            
+        # CAMPO DE DESCRIÇÃO ACRESCENTADO AQUI
+        st.session_state.servicos_adicionados[i]['descricao'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
+        st.divider()
 
 if st.button("➕ Adicionar mais um serviço"):
-    st.session_state.servicos_adicionados.append({"servico": SERVICOS_LISTA[0], "qtd": 1.0, "valor": 0.0})
+    st.session_state.servicos_adicionados.append({"servico": SERVICOS_LISTA[0], "descricao": "", "qtd": 1.0, "valor": 0.0})
     st.rerun()
-
-st.divider()
 
 total_servicos = sum(s['qtd'] * s['valor'] for s in st.session_state.servicos_adicionados)
 desconto = st.number_input("Desconto Total (R$)", min_value=0.0)
@@ -171,13 +183,9 @@ with st.expander("💰 Pagamento e Entrega"):
     data_ent = c3.date_input("Previsão de Entrega")
     restante = valor_final - entrada
 
-# 1. Primeiro, definimos o fuso horário de Brasília
 fuso_br = pytz.timezone('America/Sao_Paulo')
-
-# 2. Agora capturamos o horário exato de Brasília
 agora_br = datetime.now(fuso_br)
 
-# 3. Colocamos no seu dicionário de dados
 dados_doc = {
     "cliente": nome_c, 
     "tel": tel_c, 
@@ -189,7 +197,7 @@ dados_doc = {
     "entrada": entrada, 
     "restante": restante,
     "entrega": data_ent.strftime('%d/%m/%Y'),
-    "data_hora": agora_br.strftime('%d/%m/%Y %H:%M') # <--- Pronto!
+    "data_hora": agora_br.strftime('%d/%m/%Y %H:%M')
 }
 
 st.write(f"**Restante: R$ {formatar_br(restante)}**")
@@ -201,12 +209,4 @@ if col_a.button("📄 Gerar Orçamento"):
 
 if col_b.button("✅ Aprovar (Gerar O.S.)"):
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
-
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
-
-
-
-
-
-
-
