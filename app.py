@@ -51,9 +51,9 @@ SERVICOS_LISTA = [
     "Folder","Arte Gráfica","Site","Aplicação Webb"
 ]
 
-# Inicialização do estado com o campo 'descricao'
+# Inicialização do estado com o campo 'descrição'
 if 'servicos_adicionados' not in st.session_state:
-    st.session_state.servicos_adicionados = [{"servico": SERVICOS_LISTA[0], "descricao": "", "qtd": 1.0, "valor": 0.0}]
+    st.session_state.servicos_adicionados = [{"serviço": SERVICOS_LISTA[0], "descrição": "", "qtd": 1.0, "valor": 0.0}]
 
 def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf = FPDF()
@@ -87,9 +87,9 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
 
     # Tabela
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, "DETALHES DOS SERVICOS", ln=True, fill=True)
+    pdf.cell(0, 8, "DETALHES DOS SERVIÇOS", ln=True, fill=True)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(90, 8, "Servico / Descricao", 1)
+    pdf.cell(90, 8, "Serviço / Descrição", 1)
     pdf.cell(30, 8, "Qtd/m2", 1)
     pdf.cell(35, 8, "V. Unit", 1)
     pdf.cell(35, 8, "Subtotal", 1, ln=True)
@@ -103,9 +103,9 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
         y = pdf.get_y()
         
         # Coluna de Serviço e Descrição (Multi-line)
-        texto_servico = f"{s['servico']}"
-        if s['descricao']:
-            texto_servico += f"\nObs: {s['descricao']}"
+        texto_servico = f"{s['serviço']}"
+        if s['descrição']:
+            texto_servico += f"\nObs: {s['descrição']}"
             
         pdf.multi_cell(90, 5, texto_servico, 1)
         novo_y = pdf.get_y()
@@ -128,7 +128,7 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     # Pagamento
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, "CONDICOES DE PAGAMENTO", ln=True, fill=True)
+    pdf.cell(0, 8, "CONDIÇÕES DE PAGAMENTO", ln=True, fill=True)
     pdf.set_font("Arial", size=11)
     pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}", ln=True)
     pdf.cell(0, 8, f"Restante: R$ {formatar_br(dados['restante'])} | Entrega: {dados['entrega']}", ln=True)
@@ -153,7 +153,7 @@ st.write("### 🛠 Serviços")
 for i, item in enumerate(st.session_state.servicos_adicionados):
     with st.container():
         cols = st.columns([2, 1, 1, 0.5])
-        st.session_state.servicos_adicionados[i]['servico'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, key=f"ser_{i}")
+        st.session_state.servicos_adicionados[i]['serviço'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, key=f"ser_{i}")
         st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, key=f"qtd_{i}")
         st.session_state.servicos_adicionados[i]['valor'] = cols[2].number_input("V. Unit", min_value=0.0, step=10.0, key=f"val_{i}")
         
@@ -163,11 +163,11 @@ for i, item in enumerate(st.session_state.servicos_adicionados):
             st.rerun()
             
         # CAMPO DE DESCRIÇÃO ACRESCENTADO AQUI
-        st.session_state.servicos_adicionados[i]['descricao'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
+        st.session_state.servicos_adicionados[i]['descrição'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
         st.divider()
 
 if st.button("➕ Adicionar mais um serviço"):
-    st.session_state.servicos_adicionados.append({"servico": SERVICOS_LISTA[0], "descricao": "", "qtd": 1.0, "valor": 0.0})
+    st.session_state.servicos_adicionados.append({"serviço": SERVICOS_LISTA[0], "descrição": "", "qtd": 1.0, "valor": 0.0})
     st.rerun()
 
 total_servicos = sum(s['qtd'] * s['valor'] for s in st.session_state.servicos_adicionados)
