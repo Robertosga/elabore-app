@@ -42,13 +42,14 @@ EMPRESA = {
 }
 
 SERVICOS_LISTA = [
-    "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
+   "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
     "Toldo Retratil Braço, tubo e sarrafo aluminio","Cobertura Policarbonato",
     "Cobertura Lona", "Painel","Painel Paraline","Fachada", "Estrutura", "Banner", "Adesivo", "Plotter","Plottagem de adesivo em Painel",
-    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline","instalação de refletor",
+    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline", "Forro Pvc", "instalação de refletor",
     "Pintura", "Cavalete", "Cartão de visita", "Panfleto 4x0, 5000 und","Panfleto 4x4 - 5000 und", "Cardápio","Luminoso", "Logotipo",
     "Identidade Visual", "Manutenção", "Troca de Mola", "Troca de Tubo", "Vetorização","Cartaz",
     "Folder","Arte Gráfica","Site","Aplicação Webb"
+]
 ]
 
 # Inicialização do estado com o campo 'descrição'
@@ -98,11 +99,9 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     for s in lista_servicos:
         sub = s['qtd'] * s['valor']
         
-        # Guardar posição atual para desenhar a borda corretamente
         x = pdf.get_x()
         y = pdf.get_y()
         
-        # Coluna de Serviço e Descrição (Multi-line)
         texto_servico = f"{s['serviço']}"
         if s['descrição']:
             texto_servico += f"\nObs: {s['descrição']}"
@@ -111,7 +110,6 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
         novo_y = pdf.get_y()
         altura_celula = novo_y - y
         
-        # Voltar para o lado da multi-célula para as outras colunas
         pdf.set_xy(x + 90, y)
         pdf.cell(30, altura_celula, f"{s['qtd']}", 1)
         pdf.cell(35, altura_celula, f"R$ {formatar_br(s['valor'])}", 1)
@@ -121,8 +119,8 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, f"TOTAL DOS SERVICOS: R$ {formatar_br(dados['total_geral'])}", ln=True, align='R')
     pdf.cell(0, 10, f"DESCONTO: R$ {formatar_br(dados['desconto'])}", ln=True, align='R')
-    pdf.set_text_color(255, 0, 0)
-    pdf.cell(0, 10, f"VALOR FINAL: R$ {formatar_br(dados['valor_final'])}", ln=True, align='R')
+    pdf.set_text_color(0, 128, 0)
+    pdf.cell(0, 10, f"VALOR TOTAL COM DESCONTO: R$ {formatar_br(dados['valor_final'])}", ln=True, align='R')
     pdf.set_text_color(0, 0, 0)
 
     # Pagamento
@@ -130,8 +128,14 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 8, "CONDIÇÕES DE PAGAMENTO", ln=True, fill=True)
     pdf.set_font("Arial", size=11)
-    pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}", ln=True)
-    pdf.cell(0, 8, f"Restante: R$ {formatar_br(dados['restante'])} | Entrega: {dados['entrega']}", ln=True)
+    
+    # Texto para a entrada no PDF indicando se já foi pago
+    status_pago_pdf = " (PAGO)" if dados['entrada'] > 0 else ""
+    pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}{status_pago_pdf}", ln=True)
+    
+    pdf.set_text_color(255, 0, 0) if dados['restante'] > 0 else pdf.set_text_color(0, 128, 0)
+    pdf.cell(0, 8, f"Restante a Pagar: R$ {formatar_br(dados['restante'])} | Entrega: {dados['entrega']}", ln=True)
+    pdf.set_text_color(0, 0, 0)
     
     pdf.ln(10)
     pdf.set_font("Arial", 'I', 8)
@@ -162,7 +166,6 @@ for i, item in enumerate(st.session_state.servicos_adicionados):
             st.session_state.servicos_adicionados.pop(i)
             st.rerun()
             
-        # CAMPO DE DESCRIÇÃO ACRESCENTADO AQUI
         st.session_state.servicos_adicionados[i]['descrição'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
         st.divider()
 
@@ -172,15 +175,22 @@ if st.button("➕ Adicionar mais um serviço"):
 
 total_servicos = sum(s['qtd'] * s['valor'] for s in st.session_state.servicos_adicionados)
 desconto = st.number_input("Desconto Total (R$)", min_value=0.0)
-valor_final = total_servicos - desconto
+valor_final = max(0.0, total_servicos - desconto)
 
-st.markdown(f"### **Total Geral: R$ {formatar_br(valor_final)}**")
+st.markdown(f"### **Valor Total: R$ {formatar_br(valor_final)}**")
 
-with st.expander("💰 Pagamento e Entrega"):
+with st.expander("💰 Pagamento e Entrega", expanded=True):
     c1, c2, c3 = st.columns(3)
     forma_pag = c1.selectbox("Forma de Pagamento", ["Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito"])
-    entrada = c2.number_input("Entrada (R$)", min_value=0.0)
+    
+    # Campo para valor da entrada
+    entrada = c2.number_input("Valor da Entrada (R$)", min_value=0.0, max_value=float(valor_final), step=50.0)
     data_ent = c3.date_input("Previsão de Entrega")
+    
+    # Exibe a indicação de pago e atualiza o restante a pagar
+    if entrada > 0:
+        c2.markdown("🟢 **(PAGO)**")
+    
     restante = valor_final - entrada
 
 fuso_br = pytz.timezone('America/Sao_Paulo')
@@ -200,7 +210,8 @@ dados_doc = {
     "data_hora": agora_br.strftime('%d/%m/%Y %H:%M')
 }
 
-st.write(f"**Restante: R$ {formatar_br(restante)}**")
+# Destaque para o valor que falta pagar
+st.subheader(f"💵 **Restante a Pagar:** R$ {formatar_br(restante)}")
 
 col_a, col_b = st.columns(2)
 if col_a.button("📄 Gerar Orçamento"):
