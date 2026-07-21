@@ -50,7 +50,7 @@ SERVICOS_LISTA = [
     "Identidade Visual", "Manutenção", "Troca de Mola", "Troca de Tubo", "Vetorização","Cartaz",
     "Folder","Arte Gráfica","Site","Aplicação Webb"
 ]
-]
+
 
 # Inicialização do estado com o campo 'descrição'
 if 'servicos_adicionados' not in st.session_state:
