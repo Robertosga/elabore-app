@@ -1,9 +1,100 @@
 import streamlit as st
 from fpdf import FPDF
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from PIL import Image
 import pytz
+import sqlite3
+import json
+
+# --- CONFIGURAÇÃO DO BANCO DE DADOS SQLITE ---
+BANCO_DADOS = "historico_orcamentos.db"
+
+def iniciar_banco():
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS orcamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente TEXT,
+            telefone TEXT,
+            endereco TEXT,
+            servicos_json TEXT,
+            total_geral REAL,
+            desconto REAL,
+            valor_final REAL,
+            pagamento TEXT,
+            entrada REAL,
+            restante REAL,
+            entrega TEXT,
+            data_hora DATETIME
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def limpar_dados_antigos(dias=60):
+    """Apaga automaticamente orçamentos criados há mais de 60 dias."""
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    data_limite = datetime.now() - timedelta(days=dias)
+    cursor.execute("DELETE FROM orcamentos WHERE data_hora < ?", (data_limite,))
+    conn.commit()
+    conn.close()
+
+def salvar_orcamento_banco(dados, lista_servicos):
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    servicos_json = json.dumps(lista_servicos)
+    data_formatada_db = datetime.now()
+    
+    cursor.execute('''
+        INSERT INTO orcamentos (cliente, telefone, endereco, servicos_json, total_geral, desconto, valor_final, pagamento, entrada, restante, entrega, data_hora)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        dados['cliente'], dados['tel'], dados['end'], servicos_json,
+        dados['total_geral'], dados['desconto'], dados['valor_final'],
+        dados['pagamento'], dados['entrada'], dados['restante'],
+        dados['entrega'], data_formatada_db
+    ))
+    conn.commit()
+    conn.close()
+
+def buscar_orcamentos():
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, cliente, valor_final, strftime('%d/%m/%Y %H:%M', data_hora) FROM orcamentos ORDER BY id DESC")
+    resultados = cursor.fetchall()
+    conn.close()
+    return resultados
+
+def carregar_orcamento_por_id(orcamento_id):
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orcamentos WHERE id = ?", (orcamento_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "id": row[0],
+            "cliente": row[1],
+            "tel": row[2],
+            "end": row[3],
+            "servicos": json.loads(row[4]),
+            "total_geral": row[5],
+            "desconto": row[6],
+            "valor_final": row[7],
+            "pagamento": row[8],
+            "entrada": row[9],
+            "restante": row[10],
+            "entrega": row[11],
+            "data_hora": row[12]
+        }
+    return None
+
+# Inicializa Banco e Limpeza
+iniciar_banco()
+limpar_dados_antigos(dias=60)
 
 # --- FUNÇÃO DE SEGURANÇA ---
 def verificar_acesso():
@@ -28,7 +119,7 @@ def verificar_acesso():
 if not verificar_acesso():
     st.stop()
 
-# 1. FUNÇÃO DE FORMATAÇÃO
+# FUNÇÃO DE FORMATAÇÃO
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -42,17 +133,15 @@ EMPRESA = {
 }
 
 SERVICOS_LISTA = [
-   "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
+    "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
     "Toldo Retratil Braço, tubo e sarrafo aluminio","Cobertura Policarbonato",
     "Cobertura Lona", "Painel","Painel Paraline","Fachada", "Estrutura", "Banner", "Adesivo", "Plotter","Plottagem de adesivo em Painel",
-    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline", "Forro Pvc", "instalação de refletor",
+    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline","Forro Pvc"instalação de refletor",
     "Pintura", "Cavalete", "Cartão de visita", "Panfleto 4x0, 5000 und","Panfleto 4x4 - 5000 und", "Cardápio","Luminoso", "Logotipo",
     "Identidade Visual", "Manutenção", "Troca de Mola", "Troca de Tubo", "Vetorização","Cartaz",
     "Folder","Arte Gráfica","Site","Aplicação Webb"
 ]
 
-
-# Inicialização do estado com o campo 'descrição'
 if 'servicos_adicionados' not in st.session_state:
     st.session_state.servicos_adicionados = [{"serviço": SERVICOS_LISTA[0], "descrição": "", "qtd": 1.0, "valor": 0.0}]
 
@@ -98,7 +187,6 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.set_font("Arial", size=9)
     for s in lista_servicos:
         sub = s['qtd'] * s['valor']
-        
         x = pdf.get_x()
         y = pdf.get_y()
         
@@ -129,7 +217,6 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.cell(0, 8, "CONDIÇÕES DE PAGAMENTO", ln=True, fill=True)
     pdf.set_font("Arial", size=11)
     
-    # Texto para a entrada no PDF indicando se já foi pago
     status_pago_pdf = " (PAGO)" if dados['entrada'] > 0 else ""
     pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}{status_pago_pdf}", ln=True)
     
@@ -143,30 +230,57 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- INTERFACE ---
+# --- SIDEBAR: CONSULTA DE HISTÓRICO ---
+st.sidebar.title("📚 Histórico (Últimos 60 dias)")
+lista_salvos = buscar_orcamentos()
+
+if lista_salvos:
+    opcoes = {f"#{item[0]} - {item[1]} (R$ {formatar_br(item[2])}) - {item[3]}": item[0] for item in lista_salvos}
+    escolha = st.sidebar.selectbox("Restaurar Orçamento:", ["Nenhum"] + list(opcoes.keys()))
+    
+    if escolha != "Nenhum":
+        id_selecionado = opcoes[escolha]
+        dados_recuperados = carregar_orcamento_por_id(id_selecionado)
+        
+        if st.sidebar.button("📂 Carregar Dados no Formulário"):
+            st.session_state["cliente_rec"] = dados_recuperados["cliente"]
+            st.session_state["tel_rec"] = dados_recuperados["tel"]
+            st.session_state["end_rec"] = dados_recuperados["end"]
+            st.session_state.servicos_adicionados = dados_recuperados["servicos"]
+            st.rerun()
+        
+        # Botão direto para regerar PDF a partir do banco
+        pdf_regerado = gerar_pdf(dados_recuperados, dados_recuperados["servicos"], "ORÇAMENTO REGERADO")
+        st.sidebar.download_button("📥 Baixar PDF Salvo", pdf_regerado, f"Orcamento_{dados_recuperados['cliente']}.pdf")
+else:
+    st.sidebar.info("Nenhum orçamento salvo nos últimos 60 dias.")
+
+# --- INTERFACE PRINCIPAL ---
 st.title("Elabore Toldos")
 
 with st.expander("👤 Dados do Cliente", expanded=True):
     c1, c2 = st.columns(2)
-    nome_c = c1.text_input("Nome do Cliente")
-    tel_c = c2.text_input("Telefone")
-    end_c = st.text_input("Endereço Completo")
+    nome_c = c1.text_input("Nome do Cliente", value=st.session_state.get("cliente_rec", ""))
+    tel_c = c2.text_input("Telefone", value=st.session_state.get("tel_rec", ""))
+    end_c = st.text_input("Endereço Completo", value=st.session_state.get("end_rec", ""))
 
 st.write("### 🛠 Serviços")
 
 for i, item in enumerate(st.session_state.servicos_adicionados):
     with st.container():
         cols = st.columns([2, 1, 1, 0.5])
-        st.session_state.servicos_adicionados[i]['serviço'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, key=f"ser_{i}")
-        st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, key=f"qtd_{i}")
-        st.session_state.servicos_adicionados[i]['valor'] = cols[2].number_input("V. Unit", min_value=0.0, step=10.0, key=f"val_{i}")
         
-        # Botão de excluir
+        # Garante que o serviço salvo exista na lista padrão
+        servico_atual = item['serviço'] if item['serviço'] in SERVICOS_LISTA else SERVICOS_LISTA[0]
+        st.session_state.servicos_adicionados[i]['serviço'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, index=SERVICOS_LISTA.index(servico_atual), key=f"ser_{i}")
+        st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, value=float(item['qtd']), key=f"qtd_{i}")
+        st.session_state.servicos_adicionados[i]['valor'] = cols[2].number_input("V. Unit", min_value=0.0, step=10.0, value=float(item['valor']), key=f"val_{i}")
+        
         if cols[3].button("❌", key=f"del_{i}"):
             st.session_state.servicos_adicionados.pop(i)
             st.rerun()
             
-        st.session_state.servicos_adicionados[i]['descrição'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
+        st.session_state.servicos_adicionados[i]['descrição'] = st.text_input(f"Descrição/Observação do Serviço {i+1}", value=item.get('descrição', ''), key=f"desc_{i}", placeholder="Ex: Lona cor azul, estrutura reforçada, etc.")
         st.divider()
 
 if st.button("➕ Adicionar mais um serviço"):
@@ -182,12 +296,9 @@ st.markdown(f"### **Valor Total: R$ {formatar_br(valor_final)}**")
 with st.expander("💰 Pagamento e Entrega", expanded=True):
     c1, c2, c3 = st.columns(3)
     forma_pag = c1.selectbox("Forma de Pagamento", ["Dinheiro", "Pix", "Cartão de Crédito", "Cartão de Débito"])
-    
-    # Campo para valor da entrada
     entrada = c2.number_input("Valor da Entrada (R$)", min_value=0.0, max_value=float(valor_final), step=50.0)
     data_ent = c3.date_input("Previsão de Entrega")
     
-    # Exibe a indicação de pago e atualiza o restante a pagar
     if entrada > 0:
         c2.markdown("🟢 **(PAGO)**")
     
@@ -210,14 +321,20 @@ dados_doc = {
     "data_hora": agora_br.strftime('%d/%m/%Y %H:%M')
 }
 
-# Destaque para o valor que falta pagar
 st.subheader(f"💵 **Restante a Pagar:** R$ {formatar_br(restante)}")
 
 col_a, col_b = st.columns(2)
+
 if col_a.button("📄 Gerar Orçamento"):
+    if nome_c.strip():
+        salvar_orcamento_banco(dados_doc, st.session_state.servicos_adicionados)
+        st.success("Dados salvos no banco com sucesso!")
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORÇAMENTO")
     st.download_button("Clique aqui para baixar Orçamento", pdf_out, f"Orcamento_{nome_c}.pdf")
 
 if col_b.button("✅ Aprovar (Gerar O.S.)"):
+    if nome_c.strip():
+        salvar_orcamento_banco(dados_doc, st.session_state.servicos_adicionados)
+        st.success("Dados salvos no banco com sucesso!")
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
