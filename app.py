@@ -16,7 +16,6 @@ BANCO_DADOS = "historico_orcamentos.db"
 def iniciar_banco():
     conn = sqlite3.connect(BANCO_DADOS)
     cursor = conn.cursor()
-    # Tabela de Histórico
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS orcamentos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +33,6 @@ def iniciar_banco():
             data_hora DATETIME
         )
     ''')
-    # Tabela de Lista de Serviços
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS servicos_catalogo (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +40,6 @@ def iniciar_banco():
         )
     ''')
     
-    # Inserir serviços padrão caso a tabela esteja vazia
     cursor.execute("SELECT COUNT(*) FROM servicos_catalogo")
     if cursor.fetchone()[0] == 0:
         servicos_iniciais = [
@@ -152,7 +149,7 @@ def carregar_orcamento_por_id(orcamento_id):
         }
     return None
 
-# Inicializa Banco e Limpeza
+# Inicializa Banco
 iniciar_banco()
 limpar_dados_antigos(dias=60)
 SERVICOS_LISTA = carregar_servicos_banco()
@@ -180,14 +177,28 @@ def verificar_acesso():
 if not verificar_acesso():
     st.stop()
 
-# FUNÇÃO PARA LIMPAR FORMULÁRIO (NOVO ORÇAMENTO)
+# --- FUNÇÃO PARA LIMPAR FORMULÁRIO (NOVO ORÇAMENTO) ---
 def novo_orcamento():
+    # Limpa estados de recuperação de cliente
     st.session_state["cliente_rec"] = ""
     st.session_state["tel_rec"] = ""
     st.session_state["end_rec"] = ""
+    
+    # Limpa as chaves dos inputs de texto
+    for key in ["nome_c_input", "tel_c_input", "end_c_input"]:
+        if key in st.session_state:
+            del st.session_state[key]
+            
+    # Reseta a lista de serviços para apenas 1 em branco
     servs = carregar_servicos_banco()
     padrao = servs[0] if servs else ""
     st.session_state.servicos_adicionados = [{"serviço": padrao, "descrição": "", "qtd": 1.0, "valor": 0.0}]
+    
+    # Remove as chaves dinâmicas dos serviços
+    keys_para_remover = [k for k in st.session_state.keys() if k.startswith("ser_") or k.startswith("qtd_") or k.startswith("val_") or k.startswith("desc_")]
+    for k in keys_para_remover:
+        del st.session_state[k]
+        
     st.session_state["exibir_pago_tela"] = False
     st.rerun()
 
@@ -288,18 +299,16 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.cell(0, 8, f"Restante a Pagar: R$ {formatar_br(dados['restante'])} | Entrega: {dados['entrega']}", ln=True)
     pdf.set_text_color(0, 0, 0)
     
-    # --- CARIMBO / ASSINATURA DIGITAL (SÓ NA ORDEM DE SERVIÇO) ---
+    # --- CARIMBO / ASSINATURA DIGITAL (SÓ NA O.S.) ---
     if is_os:
         pdf.ln(8)
         carimbo_x = 110
         carimbo_y = pdf.get_y()
         
-        # Borda Retangular do Carimbo
-        pdf.set_draw_color(0, 51, 102) # Azul Escuro
+        pdf.set_draw_color(0, 51, 102)
         pdf.set_line_width(0.8)
         pdf.rect(carimbo_x, carimbo_y, 85, 28)
         
-        # Texto dentro do Carimbo
         pdf.set_xy(carimbo_x, carimbo_y + 2)
         pdf.set_font("Arial", 'B', 9)
         pdf.set_text_color(0, 51, 102)
@@ -311,7 +320,7 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
         
         pdf.set_x(carimbo_x)
         pdf.set_font("Arial", 'B', 7)
-        pdf.set_text_color(0, 102, 0) # Verde para Aprovado
+        pdf.set_text_color(0, 102, 0)
         pdf.cell(85, 5, "[ APROVADO & ASSINADO DIGITALMENTE ]", align='C', ln=True)
         
         pdf.set_x(carimbo_x)
@@ -335,10 +344,12 @@ st.sidebar.title("📌 Navegação")
 pagina = st.sidebar.radio("Ir para:", ["📄 Emissão de Orçamento / O.S.", "⚙️ Gerenciar Lista de Serviços"])
 
 col_sb1, col_sb2 = st.sidebar.columns(2)
-if col_sb1.button("🆕 Novo"):
+
+# BOTAO NOVO NA SIDEBAR
+if col_sb1.button("🆕 Novo", key="btn_novo_sidebar"):
     novo_orcamento()
 
-if col_sb2.button("🚪 Sair"):
+if col_sb2.button("🚪 Sair", key="btn_sair_sidebar"):
     st.session_state["acesso_liberado"] = False
     st.rerun()
 
@@ -364,6 +375,11 @@ if pagina == "📄 Emissão de Orçamento / O.S.":
                 st.session_state["tel_rec"] = dados_recuperados["tel"]
                 st.session_state["end_rec"] = dados_recuperados["end"]
                 st.session_state.servicos_adicionados = dados_recuperados["servicos"]
+                
+                # Atualiza os inputs
+                st.session_state["nome_c_input"] = dados_recuperados["cliente"]
+                st.session_state["tel_c_input"] = dados_recuperados["tel"]
+                st.session_state["end_c_input"] = dados_recuperados["end"]
                 st.rerun()
                 
             if col_side2.button("🗑️ Excluir"):
@@ -380,9 +396,9 @@ if pagina == "📄 Emissão de Orçamento / O.S.":
 
     with st.expander("👤 Dados do Cliente", expanded=True):
         c1, c2 = st.columns(2)
-        nome_c = c1.text_input("Nome do Cliente", value=st.session_state.get("cliente_rec", ""))
-        tel_c = c2.text_input("Telefone", value=st.session_state.get("tel_rec", ""))
-        end_c = st.text_input("Endereço Completo", value=st.session_state.get("end_rec", ""))
+        nome_c = c1.text_input("Nome do Cliente", value=st.session_state.get("cliente_rec", ""), key="nome_c_input")
+        tel_c = c2.text_input("Telefone", value=st.session_state.get("tel_rec", ""), key="tel_c_input")
+        end_c = st.text_input("Endereço Completo", value=st.session_state.get("end_rec", ""), key="end_c_input")
 
     st.write("### 🛠 Serviços")
 
@@ -468,7 +484,7 @@ if pagina == "📄 Emissão de Orçamento / O.S.":
         st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
 
     st.divider()
-    if st.button("🔄 Iniciar Novo Orçamento / Limpar Tudo"):
+    if st.button("🔄 Iniciar Novo Orçamento / Limpar Tudo", key="btn_novo_principal"):
         novo_orcamento()
 
 # --- TELA 2: GERENCIAR LISTA DE SERVIÇOS ---
