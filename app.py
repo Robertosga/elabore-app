@@ -109,7 +109,7 @@ def carregar_orcamento_por_id(orcamento_id):
 iniciar_banco()
 limpar_dados_antigos(dias=60)
 
-# --- FUNÇÃO DE SEGURANÇA ---
+# --- FUNÇÃO DE SEGURANÇA E SESSÃO ---
 def verificar_acesso():
     if "acesso_liberado" not in st.session_state:
         st.session_state["acesso_liberado"] = False
@@ -132,6 +132,15 @@ def verificar_acesso():
 if not verificar_acesso():
     st.stop()
 
+# --- FUNÇÃO PARA LIMPAR FORMULÁRIO (NOVO ORÇAMENTO) ---
+def novo_orcamento():
+    st.session_state["cliente_rec"] = ""
+    st.session_state["tel_rec"] = ""
+    st.session_state["end_rec"] = ""
+    st.session_state.servicos_adicionados = [{"serviço": SERVICOS_LISTA[0], "descrição": "", "qtd": 1.0, "valor": 0.0}]
+    st.session_state["exibir_pago_tela"] = False
+    st.rerun()
+
 # FUNÇÃO DE FORMATAÇÃO
 def formatar_br(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -149,7 +158,7 @@ SERVICOS_LISTA = [
     "Toldo Policarbonato","Troca policarbonato 6mm 1ª linha","Perfil U","Borracha fina perfil", "Toldo Cortina", "Toldo Fixo Lona",
     "Toldo Retratil Braço, tubo e sarrafo aluminio","Cobertura Policarbonato",
     "Cobertura Lona", "Painel","Painel Paraline","Fachada", "Estrutura", "Banner", "Adesivo", "Plotter","Plottagem de adesivo em Painel",
-    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline","Forro Pvc","instalação de refletor",
+    "Lona", "Troca de Lona", "Placa", "Mão de Obra", "Impressão", "Calha", "Forro Paraline","instalação de refletor",
     "Pintura", "Cavalete", "Cartão de visita", "Panfleto 4x0, 5000 und","Panfleto 4x4 - 5000 und", "Cardápio","Luminoso", "Logotipo",
     "Identidade Visual", "Manutenção", "Troca de Mola", "Troca de Tubo", "Vetorização","Cartaz",
     "Folder","Arte Gráfica","Site","Aplicação Webb"
@@ -230,7 +239,6 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.cell(0, 8, "CONDIÇÕES DE PAGAMENTO", ln=True, fill=True)
     pdf.set_font("Arial", size=11)
     
-    # "PAGO" SÓ APARECE SE FOR ORDEM DE SERVIÇO E A ENTRADA FOR MAIOR QUE ZERO
     status_pago_pdf = " (PAGO)" if ("ORDEM DE SERVIÇO" in tipo_documento.upper() or "O.S." in tipo_documento.upper()) and dados['entrada'] > 0 else ""
     pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}{status_pago_pdf}", ln=True)
     
@@ -244,7 +252,19 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- SIDEBAR: CONSULTA E EXCLUSÃO DE HISTÓRICO ---
+# --- SIDEBAR: BOTÕES DE NAVEGAÇÃO, SAIR E HISTÓRICO ---
+st.sidebar.title("⚙️ Ações")
+
+col_sb1, col_sb2 = st.sidebar.columns(2)
+
+if col_sb1.button("🆕 Novo"):
+    novo_orcamento()
+
+if col_sb2.button("🚪 Sair"):
+    st.session_state["acesso_liberado"] = False
+    st.rerun()
+
+st.sidebar.divider()
 st.sidebar.title("📚 Histórico (Últimos 60 dias)")
 lista_salvos = buscar_orcamentos()
 
@@ -265,7 +285,6 @@ if lista_salvos:
             st.session_state.servicos_adicionados = dados_recuperados["servicos"]
             st.rerun()
             
-        # OPÇÃO PARA DELETAR O REGISTRO DO SQLITE
         if col_side2.button("🗑️ Excluir"):
             deletar_orcamento_banco(id_selecionado)
             st.sidebar.success("Registro excluído!")
@@ -319,7 +338,6 @@ with st.expander("💰 Pagamento e Entrega", expanded=True):
     entrada = c2.number_input("Valor da Entrada (R$)", min_value=0.0, max_value=float(valor_final), step=50.0)
     data_ent = c3.date_input("Previsão de Entrega")
     
-    # SÓ EXIBE A INDICAÇÃO DE PAGO NA TELA SE O BOTÃO DE APROVAÇÃO O.S. TIVER SIDO ACIONADO
     if st.session_state.get("exibir_pago_tela", False) and entrada > 0:
         c2.markdown("🟢 **(PAGO)**")
     
@@ -360,3 +378,7 @@ if col_b.button("✅ Aprovar (Gerar O.S.)"):
         st.success("Dados salvos no banco com sucesso!")
     pdf_out = gerar_pdf(dados_doc, st.session_state.servicos_adicionados, "ORDEM DE SERVIÇO")
     st.download_button("Clique aqui para baixar O.S.", pdf_out, f"OS_{nome_c}.pdf")
+
+st.divider()
+if st.button("🔄 Iniciar Novo Orçamento / Limpar Tudo"):
+    novo_orcamento()
