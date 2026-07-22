@@ -46,12 +46,19 @@ def limpar_dados_antigos(dias=60):
     conn.commit()
     conn.close()
 
+def deletar_orcamento_banco(orcamento_id):
+    """Exclui um orçamento específico do banco de dados pelo ID."""
+    conn = sqlite3.connect(BANCO_DADOS)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM orcamentos WHERE id = ?", (orcamento_id,))
+    conn.commit()
+    conn.close()
+
 def salvar_orcamento_banco(dados, lista_servicos):
     conn = sqlite3.connect(BANCO_DADOS)
     cursor = conn.cursor()
     servicos_json = json.dumps(lista_servicos)
     
-    # Pega o horário exato de Brasília
     data_hora_br = datetime.now(FUSO_BR).strftime('%Y-%m-%d %H:%M:%S')
     
     cursor.execute('''
@@ -223,7 +230,8 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.cell(0, 8, "CONDIÇÕES DE PAGAMENTO", ln=True, fill=True)
     pdf.set_font("Arial", size=11)
     
-    status_pago_pdf = " (PAGO)" if dados['entrada'] > 0 else ""
+    # "PAGO" SÓ APARECE SE FOR ORDEM DE SERVIÇO E A ENTRADA FOR MAIOR QUE ZERO
+    status_pago_pdf = " (PAGO)" if ("ORDEM DE SERVIÇO" in tipo_documento.upper() or "O.S." in tipo_documento.upper()) and dados['entrada'] > 0 else ""
     pdf.cell(0, 8, f"Forma: {dados['pagamento']} | Entrada: R$ {formatar_br(dados['entrada'])}{status_pago_pdf}", ln=True)
     
     pdf.set_text_color(255, 0, 0) if dados['restante'] > 0 else pdf.set_text_color(0, 128, 0)
@@ -236,27 +244,35 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     
     return pdf.output(dest='S').encode('latin-1', 'ignore')
 
-# --- SIDEBAR: CONSULTA DE HISTÓRICO ---
+# --- SIDEBAR: CONSULTA E EXCLUSÃO DE HISTÓRICO ---
 st.sidebar.title("📚 Histórico (Últimos 60 dias)")
 lista_salvos = buscar_orcamentos()
 
 if lista_salvos:
     opcoes = {f"#{item[0]} - {item[1]} (R$ {formatar_br(item[2])}) - {item[3]}": item[0] for item in lista_salvos}
-    escolha = st.sidebar.selectbox("Restaurar Orçamento:", ["Nenhum"] + list(opcoes.keys()))
+    escolha = st.sidebar.selectbox("Restaurar / Excluir:", ["Nenhum"] + list(opcoes.keys()))
     
     if escolha != "Nenhum":
         id_selecionado = opcoes[escolha]
         dados_recuperados = carregar_orcamento_por_id(id_selecionado)
         
-        if st.sidebar.button("📂 Carregar Dados no Formulário"):
+        col_side1, col_side2 = st.sidebar.columns(2)
+        
+        if col_side1.button("📂 Carregar"):
             st.session_state["cliente_rec"] = dados_recuperados["cliente"]
             st.session_state["tel_rec"] = dados_recuperados["tel"]
             st.session_state["end_rec"] = dados_recuperados["end"]
             st.session_state.servicos_adicionados = dados_recuperados["servicos"]
             st.rerun()
+            
+        # OPÇÃO PARA DELETAR O REGISTRO DO SQLITE
+        if col_side2.button("🗑️ Excluir"):
+            deletar_orcamento_banco(id_selecionado)
+            st.sidebar.success("Registro excluído!")
+            st.rerun()
         
-        pdf_regerado = gerar_pdf(dados_recuperados, dados_recuperados["servicos"], "ORÇAMENTO REGERADO")
-        st.sidebar.download_button("📥 Baixar PDF Salvo", pdf_regerado, f"Orcamento_{dados_recuperados['cliente']}.pdf")
+        pdf_regerado = gerar_pdf(dados_recuperados, dados_recuperados["servicos"], "ORDEM DE SERVIÇO REGERADA")
+        st.sidebar.download_button("📥 Baixar PDF Salvo", pdf_regerado, f"OS_{dados_recuperados['cliente']}.pdf")
 else:
     st.sidebar.info("Nenhum orçamento salvo nos últimos 60 dias.")
 
@@ -303,12 +319,12 @@ with st.expander("💰 Pagamento e Entrega", expanded=True):
     entrada = c2.number_input("Valor da Entrada (R$)", min_value=0.0, max_value=float(valor_final), step=50.0)
     data_ent = c3.date_input("Previsão de Entrega")
     
-    if entrada > 0:
+    # SÓ EXIBE A INDICAÇÃO DE PAGO NA TELA SE O BOTÃO DE APROVAÇÃO O.S. TIVER SIDO ACIONADO
+    if st.session_state.get("exibir_pago_tela", False) and entrada > 0:
         c2.markdown("🟢 **(PAGO)**")
     
     restante = valor_final - entrada
 
-# Gera a data/hora oficial no fuso de Brasília para o documento atual
 agora_br = datetime.now(FUSO_BR)
 
 dados_doc = {
@@ -330,6 +346,7 @@ st.subheader(f"💵 **Restante a Pagar:** R$ {formatar_br(restante)}")
 col_a, col_b = st.columns(2)
 
 if col_a.button("📄 Gerar Orçamento"):
+    st.session_state["exibir_pago_tela"] = False
     if nome_c.strip():
         salvar_orcamento_banco(dados_doc, st.session_state.servicos_adicionados)
         st.success("Dados salvos no banco com sucesso!")
@@ -337,6 +354,7 @@ if col_a.button("📄 Gerar Orçamento"):
     st.download_button("Clique aqui para baixar Orçamento", pdf_out, f"Orcamento_{nome_c}.pdf")
 
 if col_b.button("✅ Aprovar (Gerar O.S.)"):
+    st.session_state["exibir_pago_tela"] = True
     if nome_c.strip():
         salvar_orcamento_banco(dados_doc, st.session_state.servicos_adicionados)
         st.success("Dados salvos no banco com sucesso!")
