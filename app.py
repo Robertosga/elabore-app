@@ -7,6 +7,9 @@ import pytz
 import sqlite3
 import json
 
+# Definindo fuso horário do Brasil (Brasília)
+FUSO_BR = pytz.timezone('America/Sao_Paulo')
+
 # --- CONFIGURAÇÃO DO BANCO DE DADOS SQLITE ---
 BANCO_DADOS = "historico_orcamentos.db"
 
@@ -37,8 +40,9 @@ def limpar_dados_antigos(dias=60):
     """Apaga automaticamente orçamentos criados há mais de 60 dias."""
     conn = sqlite3.connect(BANCO_DADOS)
     cursor = conn.cursor()
-    data_limite = datetime.now() - timedelta(days=dias)
-    cursor.execute("DELETE FROM orcamentos WHERE data_hora < ?", (data_limite,))
+    agora_br = datetime.now(FUSO_BR)
+    data_limite = agora_br - timedelta(days=dias)
+    cursor.execute("DELETE FROM orcamentos WHERE data_hora < ?", (data_limite.strftime('%Y-%m-%d %H:%M:%S'),))
     conn.commit()
     conn.close()
 
@@ -46,7 +50,9 @@ def salvar_orcamento_banco(dados, lista_servicos):
     conn = sqlite3.connect(BANCO_DADOS)
     cursor = conn.cursor()
     servicos_json = json.dumps(lista_servicos)
-    data_formatada_db = datetime.now()
+    
+    # Pega o horário exato de Brasília
+    data_hora_br = datetime.now(FUSO_BR).strftime('%Y-%m-%d %H:%M:%S')
     
     cursor.execute('''
         INSERT INTO orcamentos (cliente, telefone, endereco, servicos_json, total_geral, desconto, valor_final, pagamento, entrada, restante, entrega, data_hora)
@@ -55,7 +61,7 @@ def salvar_orcamento_banco(dados, lista_servicos):
         dados['cliente'], dados['tel'], dados['end'], servicos_json,
         dados['total_geral'], dados['desconto'], dados['valor_final'],
         dados['pagamento'], dados['entrada'], dados['restante'],
-        dados['entrega'], data_formatada_db
+        dados['entrega'], data_hora_br
     ))
     conn.commit()
     conn.close()
@@ -71,7 +77,7 @@ def buscar_orcamentos():
 def carregar_orcamento_por_id(orcamento_id):
     conn = sqlite3.connect(BANCO_DADOS)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM orcamentos WHERE id = ?", (orcamento_id,))
+    cursor.execute("SELECT id, cliente, telefone, endereco, servicos_json, total_geral, desconto, valor_final, pagamento, entrada, restante, entrega, strftime('%d/%m/%Y %H:%M', data_hora) FROM orcamentos WHERE id = ?", (orcamento_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -249,7 +255,6 @@ if lista_salvos:
             st.session_state.servicos_adicionados = dados_recuperados["servicos"]
             st.rerun()
         
-        # Botão direto para regerar PDF a partir do banco
         pdf_regerado = gerar_pdf(dados_recuperados, dados_recuperados["servicos"], "ORÇAMENTO REGERADO")
         st.sidebar.download_button("📥 Baixar PDF Salvo", pdf_regerado, f"Orcamento_{dados_recuperados['cliente']}.pdf")
 else:
@@ -270,7 +275,6 @@ for i, item in enumerate(st.session_state.servicos_adicionados):
     with st.container():
         cols = st.columns([2, 1, 1, 0.5])
         
-        # Garante que o serviço salvo exista na lista padrão
         servico_atual = item['serviço'] if item['serviço'] in SERVICOS_LISTA else SERVICOS_LISTA[0]
         st.session_state.servicos_adicionados[i]['serviço'] = cols[0].selectbox(f"Serviço {i+1}", SERVICOS_LISTA, index=SERVICOS_LISTA.index(servico_atual), key=f"ser_{i}")
         st.session_state.servicos_adicionados[i]['qtd'] = cols[1].number_input("Qtd/m²", min_value=0.0, step=1.0, value=float(item['qtd']), key=f"qtd_{i}")
@@ -304,8 +308,8 @@ with st.expander("💰 Pagamento e Entrega", expanded=True):
     
     restante = valor_final - entrada
 
-fuso_br = pytz.timezone('America/Sao_Paulo')
-agora_br = datetime.now(fuso_br)
+# Gera a data/hora oficial no fuso de Brasília para o documento atual
+agora_br = datetime.now(FUSO_BR)
 
 dados_doc = {
     "cliente": nome_c, 
