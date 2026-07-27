@@ -1,0 +1,52 @@
+name: Manter Streamlit Ativo
+
+on:
+  schedule:
+    # Roda a cada 4 horas
+    - cron: "0 */4 * * *"
+  workflow_dispatch: # Permite rodar manualmente para testar
+
+jobs:
+  wake-up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar Python e Chrome
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar Selenium
+        run: |
+          pip install selenium webdriver-manager
+
+      - name: Executar Ping no Streamlit
+        run: |
+          python -c "
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options
+          from selenium.webdriver.common.by import By
+          import time
+
+          options = Options()
+          options.add_argument('--headless')
+          options.add_argument('--no-sandbox')
+          options.add_argument('--disable-dev-shm-usage')
+
+          driver = webdriver.Chrome(options=options)
+          url = 'https://elabore-app-kus2ne4a6stuk9npsnhyjf.streamlit.app/'
+          
+          print(f'Acessando {url}...')
+          driver.get(url)
+          time.sleep(10) # Aguarda renderizar o WebSocket
+
+          # Tenta clicar no botão 'Yes, get this app back up!' se ele estiver dormindo
+          try:
+              button = driver.find_element(By.XPATH, '//button[contains(text(), \"Yes\")]')
+              button.click()
+              print('App estava dormindo. Botão de acorda clicado!')
+              time.sleep(15)
+          except:
+              print('App já estava acordado e ativo!')
+
+          driver.quit()
+          "
