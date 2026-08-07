@@ -2,7 +2,7 @@ name: Manter Streamlit Ativo
 
 on:
   schedule:
-    # Roda a cada 2 horas para garantir
+    # Roda a cada 2 horas
     - cron: "0 */2 * * *"
   workflow_dispatch:
 
@@ -25,13 +25,14 @@ jobs:
           from selenium import webdriver
           from selenium.webdriver.chrome.options import Options
           from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
           import time
 
           options = Options()
           options.add_argument('--headless=new')
           options.add_argument('--no-sandbox')
           options.add_argument('--disable-dev-shm-usage')
-          # Disfarça o robô simulando um Chrome normal em tela cheia
           options.add_argument('user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
           options.add_argument('--window-size=1920,1080')
 
@@ -41,26 +42,38 @@ jobs:
           print(f'Acessando {url}...')
           driver.get(url)
           
-          # Espera 15 segundos para carregar os scripts e o WebSocket
-          time.sleep(15)
+          # Aguarda 10s para a página inicial estipular o WebSocket
+          time.sleep(10)
 
-          # Tenta encontrar e clicar em qualquer botão de acorda (múltiplos seletores)
           try:
-              # Procura botões com texto de 'Wake up', 'Get this app back up', 'Yes'
+              # Procura especificamente por botões clicáveis de wake-up
+              wait = WebDriverWait(driver, 15)
+              
+              # Tenta localizar os botões da tela com espera explícita
               buttons = driver.find_elements(By.TAG_NAME, 'button')
               clicked = False
+              
               for btn in buttons:
-                  text = btn.text.lower()
-                  if 'yes' in text or 'wake' in text or 'get this app' in text:
-                      btn.click()
-                      print(f'Clique efetuado no botão: {btn.text}')
-                      clicked = True
-                      time.sleep(20) # Aguarda o app reiniciar após o clique
-                      break
+                  try:
+                      text = btn.text.lower()
+                      if 'yes' in text or 'wake' in text or 'get this app' in text:
+                          # Força a rolagem até o botão e aguarda ser clicável para evitar stale element
+                          driver.execute_script('arguments[0].scrollIntoView(true);', btn)
+                          time.sleep(1)
+                          btn.click()
+                          print(f'Sucesso! Clique efetuado no botão: {btn.text}')
+                          clicked = True
+                          time.sleep(20) # Tempo para o Streamlit reiniciar o app
+                          break
+                  except Exception as inner_e:
+                      # Se o elemento ficar stale na iteração, tenta o próximo
+                      continue
+                      
               if not clicked:
-                  print('Nenhum botão de wake-up encontrado. App provavelmente já estava ativo!')
+                  print('Nenhum botão de wake-up pendente. App já está ativo!')
+
           except Exception as e:
-              print(f'Erro ao procurar botão: {e}')
+              print(f'Erro durante a verificação: {e}')
 
           print('Sessão finalizada com sucesso.')
           driver.quit()
