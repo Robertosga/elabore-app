@@ -31,7 +31,7 @@ jobs:
           options.add_argument('--headless=new')
           options.add_argument('--no-sandbox')
           options.add_argument('--disable-dev-shm-usage')
-          options.add_argument('user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+          options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
           options.add_argument('--window-size=1920,1080')
 
           driver = webdriver.Chrome(options=options)
@@ -40,33 +40,38 @@ jobs:
           print(f'Acessando {url}...')
           driver.get(url)
           
-          # Aguarda o carregamento inicial da página
-          time.sleep(12)
+          # Espera a página resolver redirecionamentos do Streamlit Cloud
+          time.sleep(15)
+
+          current_url = driver.current_url
+          print(f'URL Atual após carregamento: {current_url}')
 
           try:
-              # Busca botões dinamicamente para evitar elementos antigos (stale)
+              # Se o app estiver dormindo, o Streamlit mostra botões de 'Wake up' ou 'Yes, get this app back up!'
               buttons = driver.find_elements(By.TAG_NAME, 'button')
-              clicked = False
-              
-              for i in range(len(buttons)):
+              wake_button_found = False
+
+              for btn in buttons:
                   try:
-                      # Re-localiza os botões a cada iteração para não dar StaleElement
-                      btn = driver.find_elements(By.TAG_NAME, 'button')[i]
                       text = btn.text.lower()
-                      if 'yes' in text or 'wake' in text or 'get this app' in text:
+                      if any(k in text for k in ['yes', 'wake', 'get this app', 'acordar']):
+                          print(f'Botão de acorda detectado: \"{btn.text}\". Clicando...')
                           driver.execute_script('arguments[0].click();', btn)
-                          print(f'Sucesso! Clique efetuado no botão: {btn.text}')
-                          clicked = True
-                          time.sleep(20) # Tempo para o Streamlit acordar
+                          wake_button_found = True
+                          time.sleep(25) # Aguarda o Streamlit iniciar a máquina do app
                           break
                   except Exception:
                       continue
-                      
-              if not clicked:
-                  print('Nenhum botão de wake-up pendente. App já está ativo!')
+
+              if not wake_button_found:
+                  # Tenta procurar por links ou elementos específicos da tela de repouso
+                  if 'share.streamlit.app' in current_url or 'sleeping' in driver.page_source.lower():
+                      print('Aviso: O app parece estar em tela de repouso/redirecionamento.')
+                  else:
+                      print('App acessado e carregado diretamente com sucesso!')
 
           except Exception as e:
-              print(f'Erro durante a verificação: {e}')
+              print(f'Erro durante a execução: {e}')
 
           print('Sessão finalizada com sucesso.')
           driver.quit()
