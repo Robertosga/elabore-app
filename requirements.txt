@@ -3,3 +3,4 @@ fpdf
 
 Pillow
 pytz
+qrcode[pil]

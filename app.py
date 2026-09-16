@@ -2,10 +2,12 @@ import streamlit as st
 from fpdf import FPDF
 from datetime import datetime, timedelta
 import os
+import tempfile
 from PIL import Image
 import pytz
 import sqlite3
 import json
+import qrcode
 
 # Definindo fuso horário do Brasil (Brasília)
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
@@ -210,6 +212,7 @@ def formatar_br(valor):
 EMPRESA = {
     "nome": "ELABORE TOLDOS",
     "email": "elaboreag@hotmail.com",
+    "pix_chave": "elaboreag@hotmail.com",
     "whatsapp": "62 993301650",
     "instagram": "elaboretoldos",
     "cnpj": "21710043/0001-30"
@@ -218,6 +221,30 @@ EMPRESA = {
 if 'servicos_adicionados' not in st.session_state:
     padrao = SERVICOS_LISTA[0] if SERVICOS_LISTA else ""
     st.session_state.servicos_adicionados = [{"serviço": padrao, "descrição": "", "qtd": 1.0, "valor": 0.0}]
+
+def _campo_pix(codigo, valor):
+    return f"{codigo}{len(valor):02d}{valor}"
+
+def _crc16(payload):
+    crc = 0xFFFF
+    for byte in payload.encode("utf-8"):
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+    return f"{crc:04X}"
+
+def gerar_payload_pix(valor, txid):
+    merchant_account = _campo_pix("00", "BR.GOV.BCB.PIX") + _campo_pix("01", EMPRESA["pix_chave"])
+    payload = "000201"
+    payload += _campo_pix("26", merchant_account)
+    payload += "52040000"
+    payload += "5303986"
+    payload += _campo_pix("54", f"{valor:.2f}")
+    payload += "5802BR"
+    payload += _campo_pix("59", EMPRESA["nome"][:25])
+    payload += "6002GO"
+    payload += _campo_pix("62", _campo_pix("05", txid[:25]))
+    return payload + "6304" + _crc16(payload + "6304")
 
 def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf = FPDF()
@@ -298,6 +325,30 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
     pdf.set_text_color(255, 0, 0) if dados['restante'] > 0 else pdf.set_text_color(0, 128, 0)
     pdf.cell(0, 8, f"Restante a Pagar: R$ {formatar_br(dados['restante'])} | Entrega: {dados['entrega']}", ln=True)
     pdf.set_text_color(0, 0, 0)
+
+    if dados.get("pagamento") == "Pix" and tipo_documento.upper() == "ORÇAMENTO":
+        pdf.ln(4)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 8, "PAGAMENTO VIA PIX", ln=True, fill=True)
+        pdf.set_font("Arial", size=10)
+        pdf.cell(0, 7, f"Chave PIX: {EMPRESA['pix_chave']}", ln=True)
+
+        payload_pix = gerar_payload_pix(dados["valor_final"], f"ORC{dados['data_hora'].replace('/', '').replace(':', '').replace(' ', '')}")
+        arquivo_qr = None
+        try:
+            qr_code = qrcode.make(payload_pix)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as arquivo_temporario:
+                arquivo_qr = arquivo_temporario.name
+            qr_code.save(arquivo_qr)
+            posicao_qr_y = pdf.get_y() + 2
+            pdf.image(arquivo_qr, x=15, y=posicao_qr_y, w=42, h=42)
+            pdf.set_xy(65, posicao_qr_y + 12)
+            pdf.set_font("Arial", 'I', 10)
+            pdf.multi_cell(125, 6, "Aponte a camera do celular para o QR Code para pagar este orçamento.")
+            pdf.set_y(posicao_qr_y + 46)
+        finally:
+            if arquivo_qr and os.path.exists(arquivo_qr):
+                os.unlink(arquivo_qr)
     
     # --- CARIMBO / ASSINATURA DIGITAL (SÓ NA O.S.) ---
     if is_os:
