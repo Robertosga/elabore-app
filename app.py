@@ -333,7 +333,10 @@ def gerar_pdf(dados, lista_servicos, tipo_documento):
         pdf.set_font("Arial", size=10)
         pdf.cell(0, 7, f"Chave PIX: {EMPRESA['pix_chave']}", ln=True)
 
-        payload_pix = gerar_payload_pix(dados["valor_final"], f"ORC{dados['data_hora'].replace('/', '').replace(':', '').replace(' ', '')}")
+        payload_pix = gerar_payload_pix(
+            dados["entrada"],
+            f"ORC{dados['data_hora'].replace('/', '').replace(':', '').replace(' ', '')}"
+        )
         arquivo_qr = None
         try:
             qr_code = qrcode.make(payload_pix)
