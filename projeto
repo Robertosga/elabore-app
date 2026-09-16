@@ -1,0 +1,8 @@
+estrutura:
+ python
+ streamlit
+ postgresql
+
+github - steira de produção
+render - hospedagem
+neon - postgresql
